@@ -1,14 +1,18 @@
 package main.scala.dataloader
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SaveMode}
 import java.io.File
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions._
 
 object DataLoader {
 
   def main(args: Array[String]): Unit = {
 
     val dataDir: String = "data//price"
+
+    val jdbcUrl = "jdbc:postgresql://localhost:5432/marketdb"
+    val tableName = "raw.price"
 
     val spark = SparkSession
       .builder
@@ -23,20 +27,36 @@ object DataLoader {
 
     val sampleFile = fileNames(0)
 
-    val schema = StructType(Array(StructField("InstrumentKey", IntegerType, false),
-      StructField("TradeDt", StringType, false),
-      StructField("OpenPriceAmt", FloatType, false),
-      StructField("ClosingAskPriceAmt", FloatType, false),
-      StructField("ClosingBidPriceAmt", FloatType, false),
-      StructField("ClosingBidPriceAmt2", FloatType, false),
-      StructField("ClosingPriceAmt", FloatType, false),
-      StructField("HighestTradingPriceAmt", FloatType, false),
-      StructField("LowestPriceAmt", FloatType, false),
-      StructField("NumberOfTradesQty", IntegerType, false)))
+    val schema = StructType(Array(StructField("instrument_key", IntegerType, false),
+      StructField("trade_date", DateType, false),
+      StructField("open", FloatType, false),
+      StructField("closing_ask", FloatType, false),
+      StructField("closing_bid", FloatType, false),
+      StructField("closing_bid2", FloatType, false),
+      StructField("close", FloatType, false),
+      StructField("highest", FloatType, false),
+      StructField("lowest", FloatType, false),
+      StructField("trade_quantity", IntegerType, false)))
 
     val priceDF = spark.read.schema(schema).csv(sampleFile)
 
-    priceDF.show(10)
+    val priceDF2 = priceDF.drop("closing_bid2")
+      .filter(col("open").isNotNull)
+      .filter(col("trade_quantity").isNotNull)
+
+    priceDF2.write
+      .mode(SaveMode.Append)
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tableName)
+      .option("user", "super")
+      .option("password", "1010TeraB!")
+      .option("driver", "org.postgresql.Driver")
+      .save()
+
+    spark.stop()
+
+    // priceDF2.show(10)
 
 
   }
@@ -45,11 +65,8 @@ object DataLoader {
     val directory = new File(directoryPath)
 
     if (directory.exists && directory.isDirectory) {
-      println("directory exists")
-      val files = directory.listFiles.filter(_.isFile)
-      files.map(f => f.toString())
+      directory.listFiles.filter(_.isFile).map(f => f.toString())
     } else {
-      print("directory does not exist")
       Array.empty[String]
     }
   }
