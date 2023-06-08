@@ -4,3 +4,4 @@ jars/
 project
 target/
 data/
+config.json
